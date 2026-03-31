@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>财务报销助手</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f5f3ef;--bg2:#ffffff;--bg3:#f0ede8;--bg4:#e8e4dc;
+  --border:#ddd9d0;--border2:#ccc8be;
+  --text:#1a1917;--text2:#6b6760;--text3:#a09c94;
+  --green:#2d7a4f;--green-bg:#edf7f2;--green-bd:#b8dfc9;
+  --red:#c0392b;--red-bg:#fdf2f1;--red-bd:#f5c6c2;
+  --amber:#8a6200;--amber-bg:#fefaed;--amber-bd:#f0d88a;
+  --blue:#1a5fa8;--blue-bg:#eff5fc;--blue-bd:#b8d4f0;
+  --serif:'Noto Serif SC',serif;--sans:'Noto Sans SC',sans-serif;--mono:'JetBrains Mono',monospace;
+  --r:8px;--r-lg:14px;
+}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.65;display:flex;height:100vh}
+
+/* ── SIDEBAR ── */
+.sidebar{width:220px;min-width:220px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column}
+.sidebar-header{padding:20px 18px 14px;border-bottom:1px solid var(--border)}
+.logo{font-family:var(--serif);font-size:16px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px}
+.logo-badge{width:30px;height:30px;background:var(--green);border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px}
+.logo-sub{font-size:10px;color:var(--text3);margin-top:3px;letter-spacing:.06em}
+.sidebar-nav{padding:12px 10px;flex:1;overflow-y:auto}
+.nav-label{font-size:10px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;padding:0 8px;margin-bottom:6px}
+.nav-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:var(--r);font-size:12.5px;color:var(--text2);cursor:pointer;transition:all .15s;margin-bottom:2px}
+.nav-item:hover{background:var(--bg3);color:var(--text)}
+.nav-item.active{background:var(--green-bg);color:var(--green);font-weight:500}
+.nav-divider{height:1px;background:var(--border);margin:10px 8px}
+.sidebar-bottom{padding:14px 16px;border-top:1px solid var(--border)}
+.status-dot{width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block;margin-right:5px;box-shadow:0 0 5px var(--green)}
+.status-text{font-size:11px;color:var(--text3)}
+
+/* ── MAIN ── */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{padding:12px 24px;border-bottom:1px solid var(--border);background:var(--bg2);display:flex;align-items:center;justify-content:space-between}
+.topbar-left{display:flex;align-items:center;gap:10px}
+.topbar-title{font-family:var(--serif);font-size:15px;font-weight:500}
+.topbar-badge{font-size:10px;background:var(--green-bg);color:var(--green);border:1px solid var(--green-bd);padding:2px 8px;border-radius:20px}
+.btn-sm{background:none;border:1px solid var(--border2);color:var(--text2);padding:5px 12px;border-radius:var(--r);font-size:11.5px;cursor:pointer;font-family:var(--sans);transition:all .15s}
+.btn-sm:hover{border-color:var(--green);color:var(--green)}
+
+/* ── CHAT AREA ── */
+.chat-area{flex:1;overflow-y:auto;padding:20px 0}
+.chat-area::-webkit-scrollbar{width:4px}
+.chat-area::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+.message-row{max-width:900px;margin:0 auto;padding:4px 24px;display:flex;gap:12px;animation:fadeUp .2s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+.avatar{width:30px;height:30px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;margin-top:2px}
+.avatar-assistant{background:var(--green);color:#fff;font-family:var(--serif);font-weight:600}
+.avatar-user{background:var(--bg4);border:1px solid var(--border);color:var(--text2)}
+.bubble{flex:1;padding-top:2px}
+.bubble-meta{font-size:10.5px;color:var(--text3);margin-bottom:5px}
+.bubble-text{color:var(--text);line-height:1.75}
+.bubble-text p{margin-bottom:8px}
+.bubble-text p:last-child{margin-bottom:0}
+.bubble-text strong{font-weight:500}
+.bubble-text code{font-family:var(--mono);font-size:12px;background:var(--bg3);padding:1px 5px;border-radius:3px}
+.typing-dots{display:flex;gap:4px;padding:4px 0}
+.typing-dots span{width:5px;height:5px;background:var(--green);border-radius:50%;animation:blink 1.2s infinite;opacity:.3}
+.typing-dots span:nth-child(2){animation-delay:.2s}
+.typing-dots span:nth-child(3){animation-delay:.4s}
+@keyframes blink{0%,100%{opacity:.3}50%{opacity:1}}
+.file-bubble{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;display:inline-flex;align-items:center;gap:10px;max-width:260px}
+.file-icon{width:32px;height:32px;border-radius:6px;background:var(--blue-bg);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.file-name{font-size:12.5px;font-weight:500;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-size{font-size:10.5px;color:var(--text3)}
+
+/* ══════════════════════════════════════════════════════════
+   VOUCHER EDITOR — 交互式凭证编辑器
+══════════════════════════════════════════════════════════ */
+.voucher-editor{background:var(--bg2);border:1.5px solid var(--green-bd);border-radius:var(--r-lg);overflow:hidden;margin-top:12px;max-width:680px;box-shadow:0 2px 12px rgba(0,0,0,.06)}
+
+/* 编辑器头部 */
+.ve-header{background:var(--green-bg);border-bottom:1px solid var(--green-bd);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.ve-title{font-family:var(--serif);font-size:13px;font-weight:600;color:var(--green);display:flex;align-items:center;gap:6px}
+.ve-status{font-size:11px;padding:2px 8px;border-radius:10px;font-weight:500}
+.ve-status.balanced{background:var(--green-bg);color:var(--green);border:1px solid var(--green-bd)}
+.ve-status.unbalanced{background:var(--red-bg);color:var(--red);border:1px solid var(--red-bd)}
+.ve-history-btns{display:flex;gap:4px}
+.ve-hist-btn{background:none;border:1px solid var(--border2);color:var(--text2);width:26px;height:26px;border-radius:5px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.ve-hist-btn:hover:not(:disabled){border-color:var(--amber-bd);color:var(--amber)}
+.ve-hist-btn:disabled{opacity:.3;cursor:not-allowed}
+
+/* 元数据区：摘要/部门/姓名 */
+.ve-meta{padding:12px 16px;border-bottom:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.ve-field{display:flex;flex-direction:column;gap:3px}
+.ve-field-label{font-size:10px;color:var(--text3);letter-spacing:.05em;text-transform:uppercase}
+.ve-field-input{border:1px solid var(--border2);border-radius:5px;padding:5px 8px;font-size:12.5px;font-family:var(--sans);color:var(--text);background:var(--bg);outline:none;transition:border-color .15s;width:100%}
+.ve-field-input:focus{border-color:var(--green)}
+.ve-field-input.changed{border-color:var(--amber);background:var(--amber-bg)}
+
+/* 分录表格 */
+.ve-table-wrap{overflow-x:auto}
+.ve-table{width:100%;border-collapse:collapse;font-size:12.5px}
+.ve-table th{font-size:10.5px;color:var(--text3);font-weight:500;padding:8px 10px;background:var(--bg3);border-bottom:1px solid var(--border);text-align:left;white-space:nowrap;letter-spacing:.04em}
+.ve-table th.num{text-align:right}
+.ve-table td{padding:6px 8px;border-bottom:1px solid var(--border);vertical-align:middle}
+.ve-table tr:last-child td{border-bottom:none}
+.ve-table tr:hover td{background:var(--bg3)}
+.ve-entry-input{border:1px solid transparent;border-radius:4px;padding:4px 6px;font-size:12.5px;font-family:var(--mono);color:var(--text);background:transparent;outline:none;width:100%;transition:all .15s;text-align:right}
+.ve-entry-input.account-input{font-family:var(--sans);text-align:left}
+.ve-entry-input:focus{border-color:var(--green);background:var(--bg2)}
+.ve-entry-input.changed{border-color:var(--amber)!important;background:var(--amber-bg)!important}
+.ve-entry-input[placeholder]:focus::placeholder{color:transparent}
+.debit-cell .ve-entry-input:focus{color:var(--red)}
+.credit-cell .ve-entry-input:focus{color:var(--blue)}
+.ve-del-btn{width:22px;height:22px;background:none;border:none;color:var(--text3);cursor:pointer;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:14px;transition:all .15s;opacity:.5}
+.ve-del-btn:hover{background:var(--red-bg);color:var(--red);opacity:1}
+
+/* 添加行按钮 */
+.ve-add-row{padding:8px 16px;border-top:1px dashed var(--border2)}
+.ve-add-btn{background:none;border:1px dashed var(--border2);color:var(--text3);padding:5px 12px;border-radius:var(--r);font-size:11.5px;cursor:pointer;font-family:var(--sans);transition:all .15s;display:flex;align-items:center;gap:5px;width:100%;justify-content:center}
+.ve-add-btn:hover{border-color:var(--green);color:var(--green);background:var(--green-bg)}
+
+/* 汇总行 */
+.ve-summary{padding:10px 16px;background:var(--bg3);border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;font-size:12px}
+.ve-totals{display:flex;gap:20px}
+.ve-total-item{display:flex;align-items:center;gap:5px}
+.ve-total-label{color:var(--text3)}
+.ve-total-debit{font-family:var(--mono);font-weight:500;color:var(--red)}
+.ve-total-credit{font-family:var(--mono);font-weight:500;color:var(--blue)}
+.ve-diff{font-family:var(--mono);font-size:11px}
+.ve-diff.ok{color:var(--green)}
+.ve-diff.err{color:var(--red)}
+
+/* 操作按钮 */
+.ve-actions{padding:12px 16px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ve-btn-confirm{background:var(--green);color:#fff;border:none;padding:7px 20px;border-radius:var(--r);font-size:12.5px;cursor:pointer;font-family:var(--sans);font-weight:500;transition:all .15s;display:flex;align-items:center;gap:5px}
+.ve-btn-confirm:hover:not(:disabled){background:#256842}
+.ve-btn-confirm:disabled{opacity:.4;cursor:not-allowed}
+.ve-btn-cancel{background:none;border:1px solid var(--red-bd);color:var(--red);padding:7px 14px;border-radius:var(--r);font-size:12.5px;cursor:pointer;font-family:var(--sans);transition:all .15s}
+.ve-btn-cancel:hover{background:var(--red-bg)}
+.ve-btn-tell{background:none;border:1px solid var(--border2);color:var(--text2);padding:7px 14px;border-radius:var(--r);font-size:12.5px;cursor:pointer;font-family:var(--sans);transition:all .15s;margin-left:auto}
+.ve-btn-tell:hover{border-color:var(--blue-bd);color:var(--blue)}
+.ve-balance-hint{font-size:11px;color:var(--red);display:flex;align-items:center;gap:4px}
+.ve-balance-hint.ok{color:var(--green)}
+
+/* MCP 凭证卡 */
+.mcp-card{background:var(--blue-bg);border:1.5px solid var(--blue-bd);border-radius:var(--r-lg);padding:14px 16px;margin-top:10px;max-width:540px}
+.mcp-title{font-size:12px;color:var(--blue);font-weight:500;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.mcp-row{display:flex;justify-content:space-between;font-size:11.5px;padding:4px 0;border-bottom:1px solid var(--blue-bd)}
+.mcp-row:last-child{border-bottom:none}
+.mcp-key{color:var(--text3)}
+.mcp-val{font-family:var(--mono);color:var(--blue);font-size:11px}
+.mcp-json-btn{margin-top:10px;background:none;border:1px solid var(--blue-bd);color:var(--blue);padding:4px 10px;border-radius:4px;font-size:11px;cursor:pointer;font-family:var(--sans);transition:all .15s}
+.mcp-json-btn:hover{background:var(--blue);color:#fff}
+
+/* ── INPUT BAR ── */
+.input-wrap{padding:12px 24px 16px;background:var(--bg2);border-top:1px solid var(--border)}
+.input-bar{max-width:900px;margin:0 auto}
+.queue-pills{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.queue-pill{display:flex;align-items:center;gap:5px;background:var(--green-bg);border:1px solid var(--green-bd);border-radius:20px;padding:3px 9px 3px 7px;font-size:11px;color:var(--green);animation:fadeUp .2s ease}
+.pill-rm{background:none;border:none;color:var(--green);cursor:pointer;font-size:13px;opacity:.7}
+.pill-rm:hover{opacity:1}
+.drop-zone{border:1.5px dashed var(--border2);border-radius:var(--r);padding:14px;text-align:center;cursor:pointer;position:relative;background:var(--bg3);display:none;margin-bottom:10px;transition:all .2s}
+.drop-zone.visible{display:block}
+.drop-zone.active{border-color:var(--green);background:var(--green-bg)}
+.drop-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.drop-text{font-size:12.5px;color:var(--text2);pointer-events:none}
+.drop-text strong{color:var(--green)}
+.drop-types{font-size:11px;color:var(--text3);margin-top:3px;pointer-events:none}
+.input-row{display:flex;gap:8px;align-items:flex-end}
+.input-field{flex:1;background:var(--bg);border:1px solid var(--border2);border-radius:var(--r-lg);display:flex;align-items:flex-end;padding:2px 4px 2px 14px;transition:border-color .2s}
+.input-field:focus-within{border-color:var(--green)}
+textarea#msgInput{flex:1;background:none;border:none;outline:none;color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.6;resize:none;min-height:44px;max-height:120px;padding:10px 0}
+textarea#msgInput::placeholder{color:var(--text3)}
+.input-btns{display:flex;align-items:center;gap:3px;padding-bottom:6px}
+.btn-attach{width:30px;height:30px;background:none;border:none;color:var(--text3);cursor:pointer;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:15px;transition:all .15s}
+.btn-attach:hover{color:var(--green);background:var(--green-bg)}
+.btn-send{width:38px;height:38px;background:var(--green);border:none;border-radius:10px;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0}
+.btn-send:hover{background:#256842}
+.btn-send:disabled{opacity:.4;cursor:not-allowed}
+.btn-send svg{width:15px;height:15px}
+.input-hint{font-size:10.5px;color:var(--text3);margin-top:7px;text-align:center}
+
+/* ── WELCOME ── */
+.welcome{max-width:900px;margin:0 auto;padding:24px 24px 36px}
+.welcome-heading{font-family:var(--serif);font-size:22px;font-weight:600;margin-bottom:6px}
+.welcome-sub{color:var(--text2);font-size:13.5px;margin-bottom:24px;line-height:1.7}
+.guide-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.guide-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r-lg);padding:16px;cursor:pointer;transition:border-color .2s}
+.guide-card:hover{border-color:var(--green)}
+.guide-icon{font-size:22px;margin-bottom:6px}
+.guide-title{font-size:13px;font-weight:500;margin-bottom:3px}
+.guide-desc{font-size:11.5px;color:var(--text2);line-height:1.55}
+
+/* ── JSON MODAL ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:100;opacity:0;pointer-events:none;transition:opacity .2s}
+.modal-overlay.open{opacity:1;pointer-events:all}
+.modal-box{background:var(--bg2);border:1px solid var(--border);border-radius:16px;width:min(660px,92vw);max-height:80vh;display:flex;flex-direction:column;overflow:hidden;transform:translateY(10px);transition:transform .2s}
+.modal-overlay.open .modal-box{transform:translateY(0)}
+.modal-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.modal-title{font-family:var(--serif);font-size:14px}
+.modal-close{background:none;border:none;color:var(--text3);cursor:pointer;font-size:20px;line-height:1}
+.modal-body{overflow-y:auto;padding:18px}
+pre.json-view{font-family:var(--mono);font-size:12px;line-height:1.7;white-space:pre-wrap;word-break:break-all}
+.json-key{color:#1a5fa8}.json-str{color:#2d7a4f}.json-num{color:#b8860b}.json-bool{color:#8b5e3c}.json-null{color:var(--text3)}
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <div class="logo"><div class="logo-badge">财</div>财务报销助手</div>
+    <div class="logo-sub">FINANCE REIMBURSEMENT AGENT</div>
+  </div>
+  <div class="sidebar-nav">
+    <div class="nav-label">工作流</div>
+    <div class="nav-item active">💬 智能报销对话</div>
+    <div class="nav-divider"></div>
+    <div class="nav-label">快速报销</div>
+    <div class="nav-item" onclick="setMsg('科技部张三的士票报销')">🚕 出租车票</div>
+    <div class="nav-item" onclick="setMsg('市场部李四出差火车票报销')">🚄 交通票据</div>
+    <div class="nav-item" onclick="setMsg('财务部王五住宿报销')">🏨 住宿发票</div>
+    <div class="nav-item" onclick="setMsg('业务部赵六招待餐饮报销')">🍽️ 餐饮招待</div>
+    <div class="nav-item" onclick="setMsg('采购部孙七办公用品报销')">📦 采购发票</div>
+    <div class="nav-divider"></div>
+    <div class="nav-item" onclick="clearChat()">🗑️ 清空对话</div>
+    <div class="nav-item" onclick="checkHealth()">🔗 连接检测</div>
+  </div>
+  <div class="sidebar-bottom">
+    <div><span class="status-dot"></span><span class="status-text" id="statusText">Agent 就绪</span></div>
+    <div style="font-size:11px;color:var(--text3);margin-top:4px">会话: <span id="sessDisplay" style="font-family:var(--mono)"></span></div>
+  </div>
+</aside>
+
+<main class="main">
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-title">财务报销智能 Agent</div>
+      <div class="topbar-badge">MCP 凭证协议 · 交互式编辑</div>
+    </div>
+    <button class="btn-sm" onclick="clearChat()">新建会话</button>
+  </div>
+
+  <div class="chat-area" id="chatArea">
+    <div class="welcome" id="welcomeBlock">
+      <div class="welcome-heading">你好，我是财务报销助手</div>
+      <div class="welcome-sub">上传发票图片并告诉我报销信息，我会自动识别、生成可编辑凭证。你可以直接修改任意字段、增删分录行，借贷平衡后一键提交 ERP。</div>
+      <div class="guide-grid">
+        <div class="guide-card" onclick="setMsg('科技部张三的士票报销')">
+          <div class="guide-icon">🚕</div>
+          <div class="guide-title">上传票据直接报销</div>
+          <div class="guide-desc">发送"科技部张三的士票报销"并上传图片，自动生成可编辑凭证</div>
+        </div>
+        <div class="guide-card" onclick="setMsg('帮我修改科目为差旅费')">
+          <div class="guide-icon">✏️</div>
+          <div class="guide-title">告诉 Agent 修改</div>
+          <div class="guide-desc">直接说"科目改为差旅费"或"金额改为150"，Agent 自动更新</div>
+        </div>
+        <div class="guide-card" onclick="setMsg('撤销刚才的修改')">
+          <div class="guide-icon">↩️</div>
+          <div class="guide-title">撤销/回滚</div>
+          <div class="guide-desc">点击撤销按钮或告诉 Agent"撤销"，支持多步历史回滚</div>
+        </div>
+        <div class="guide-card" onclick="setMsg('帮我增加一行分录')">
+          <div class="guide-icon">➕</div>
+          <div class="guide-title">增加分录行</div>
+          <div class="guide-desc">点击"添加分录"或告诉 Agent，自动保持借贷平衡校验</div>
+        </div>
+      </div>
+    </div>
+    <div id="messagesContainer"></div>
+  </div>
+
+  <div class="input-wrap">
+    <div class="input-bar">
+      <div class="queue-pills" id="queuePills"></div>
+      <div class="drop-zone" id="dropZone">
+        <input type="file" id="fileInput" accept=".jpg,.jpeg,.png,.pdf,.bmp"
+               onchange="handleFiles(this.files)">
+        <div class="drop-text">拖拽发票图片，或 <strong>点击选择</strong></div>
+        <div class="drop-types">JPG · PNG · PDF</div>
+      </div>
+      <div class="input-row">
+        <div class="input-field">
+          <textarea id="msgInput" placeholder="输入报销说明，或直接告诉我修改内容…" rows="1"
+            onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+          <div class="input-btns">
+            <button class="btn-attach" onclick="toggleDrop()" title="上传发票">📎</button>
+          </div>
+        </div>
+        <button class="btn-send" id="sendBtn" onclick="sendMsg()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </button>
+      </div>
+      <div class="input-hint">Enter 发送 · Shift+Enter 换行 · 📎 上传发票</div>
+    </div>
+  </div>
+</main>
+
+<div class="modal-overlay" id="jsonModal" onclick="if(event.target===this)closeModal()">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title">MCP 凭证报文</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body"><pre class="json-view" id="jsonContent"></pre></div>
+  </div>
+</div>
+
+<script>
+const API = 'http://localhost:8001';
+let SESSION_ID = 'sess-' + Date.now();
+let stagedFile = null;
+let isLoading  = false;
+
+// ── 凭证状态（全局，跨对话持久）────────────────────────────────
+let voucherState = null;      // 当前凭证数据
+let voucherHistory = [];      // 历史快照（撤销用）
+let voucherRedoStack = [];    // 重做栈
+let voucherEditorId = null;   // 当前编辑器的 DOM id
+
+document.getElementById('sessDisplay').textContent = SESSION_ID.slice(-8);
+
+// ── UTILS ─────────────────────────────────────────────────────
+function autoResize(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,120)+'px'}
+function handleKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg()}}
+function setMsg(t){document.getElementById('msgInput').value=t;document.getElementById('msgInput').focus()}
+function scrollBottom(){const ca=document.getElementById('chatArea');ca.scrollTo({top:ca.scrollHeight,behavior:'smooth'})}
+function hideWelcome(){const wb=document.getElementById('welcomeBlock');if(wb)wb.style.display='none'}
+function toggleDrop(){document.getElementById('dropZone').classList.toggle('visible')}
+function setStatus(s){document.getElementById('statusText').textContent=s}
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function md2html(t){
+  return t.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+          .replace(/`([^`]+)`/g,'<code>$1</code>')
+          .split(/\n\n+/).map(p=>`<p>${p.replace(/\n/g,'<br>')}</p>`).join('')
+}
+
+// ── FILE ─────────────────────────────────────────────────────
+const dropZone=document.getElementById('dropZone');
+['dragover','dragleave','drop'].forEach(ev=>dropZone.addEventListener(ev,e=>{
+  e.preventDefault();
+  if(ev==='dragover')dropZone.classList.add('active');
+  else if(ev==='dragleave')dropZone.classList.remove('active');
+  else{dropZone.classList.remove('active');handleFiles(e.dataTransfer.files)}
+}));
+document.body.addEventListener('dragover',e=>{e.preventDefault();dropZone.classList.add('visible','active')});
+document.body.addEventListener('dragleave',e=>{if(!e.relatedTarget)dropZone.classList.remove('active')});
+document.body.addEventListener('drop',e=>{e.preventDefault();dropZone.classList.remove('active');handleFiles(e.dataTransfer.files)});
+
+function handleFiles(files){
+  if(!files.length)return;
+  stagedFile=files[0];renderPill();
+  dropZone.classList.remove('visible');
+  document.getElementById('fileInput').value='';
+}
+function renderPill(){
+  const c=document.getElementById('queuePills');c.innerHTML='';
+  if(!stagedFile)return;
+  const p=document.createElement('div');p.className='queue-pill';
+  p.innerHTML=`<span>📄</span><span>${stagedFile.name}</span><button class="pill-rm" onclick="stagedFile=null;renderPill()">×</button>`;
+  c.appendChild(p);
+}
+
+// ── MESSAGES ─────────────────────────────────────────────────
+function appendMsg(role,html){
+  hideWelcome();
+  const c=document.getElementById('messagesContainer');
+  const row=document.createElement('div');row.className='message-row';
+  row.innerHTML=`
+    <div class="avatar avatar-${role}">${role==='assistant'?'财':'我'}</div>
+    <div class="bubble">
+      <div class="bubble-meta">${role==='assistant'?'财务报销助手':'我'}</div>
+      <div class="bubble-text">${html}</div>
+    </div>`;
+  c.appendChild(row);scrollBottom();
+  return row;
+}
+function appendTyping(){return appendMsg('assistant','<div class="typing-dots"><span></span><span></span><span></span></div>')}
+
+// ══════════════════════════════════════════════════════════════
+// VOUCHER EDITOR — 交互式凭证编辑器核心
+// ══════════════════════════════════════════════════════════════
+
+// 从回复文本中提取凭证（兜底，正常情况由后端 voucher_data 直接提供）
+function parseVoucherFromReply(reply) {
+  // 尝试解析 VOUCHER_JSON 块
+  const m = reply.match(/%%VOUCHER_JSON_START%%\s*([\s\S]*?)\s*%%VOUCHER_JSON_END%%/);
+  if (m) { try { return JSON.parse(m[1]); } catch(e) {} }
+  // 尝试解析 ```json 块
+  const j = reply.match(/```json\s*([\s\S]*?)```/);
+  if (j) { try { return JSON.parse(j[1]); } catch(e) {} }
+  return null;
+}
+
+function parseAmt(s) {
+  if (!s || s === '-' || s.trim() === '') return 0;
+  const n = parseFloat(s.replace(/[¥,，\s]/g,''));
+  return isNaN(n) ? 0 : n;
+}
+
+function genId() {
+  return 'VOU-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' + Math.random().toString(36).slice(2,8).toUpperCase();
+}
+
+// 深拷贝凭证状态
+function cloneVoucher(v) { return JSON.parse(JSON.stringify(v)); }
+
+// 保存历史快照
+function saveHistory() {
+  if (voucherState) {
+    voucherHistory.push(cloneVoucher(voucherState));
+    voucherRedoStack = [];
+    if (voucherHistory.length > 50) voucherHistory.shift();
+  }
+}
+
+// 计算借贷合计
+function calcTotals(entries) {
+  const debit  = entries.reduce((s,e)=>s+(e.debit||0),0);
+  const credit = entries.reduce((s,e)=>s+(e.credit||0),0);
+  return { debit: Math.round(debit*100)/100, credit: Math.round(credit*100)/100 };
+}
+
+function isBalanced(entries) {
+  const {debit,credit} = calcTotals(entries);
+  return Math.abs(debit-credit) < 0.01;
+}
+
+// 渲染/刷新凭证编辑器
+function renderVoucherEditor(voucher, containerId) {
+  voucherState = voucher;
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  voucherEditorId = containerId;
+
+  const {debit, credit} = calcTotals(voucher.entries);
+  const balanced = Math.abs(debit-credit) < 0.01;
+  const diff = Math.round((debit-credit)*100)/100;
+  const canUndo = voucherHistory.length > 0;
+  const canRedo = voucherRedoStack.length > 0;
+
+  container.innerHTML = `
+  <div class="voucher-editor" id="ve-${containerId}">
+    <div class="ve-header">
+      <div class="ve-title">📑 记账凭证草稿</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="ve-status ${balanced?'balanced':'unbalanced'}">${balanced?'✓ 借贷平衡':'✗ 未平衡'}</span>
+        <div class="ve-history-btns">
+          <button class="ve-hist-btn" title="撤销" onclick="undoVoucher('${containerId}')" ${canUndo?'':'disabled'}>↩</button>
+          <button class="ve-hist-btn" title="重做" onclick="redoVoucher('${containerId}')" ${canRedo?'':'disabled'}>↪</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="ve-meta">
+      <div class="ve-field">
+        <div class="ve-field-label">摘要</div>
+        <input class="ve-field-input" id="ve-summary-${containerId}" value="${esc(voucher.summary||'')}"
+               oninput="onMetaChange('${containerId}','summary',this.value)">
+      </div>
+      <div class="ve-field">
+        <div class="ve-field-label">部门</div>
+        <input class="ve-field-input" id="ve-dept-${containerId}" value="${esc(voucher.department||'')}"
+               oninput="onMetaChange('${containerId}','department',this.value)">
+      </div>
+      <div class="ve-field">
+        <div class="ve-field-label">报销人</div>
+        <input class="ve-field-input" id="ve-sub-${containerId}" value="${esc(voucher.submitter||'')}"
+               oninput="onMetaChange('${containerId}','submitter',this.value)">
+      </div>
+    </div>
+
+    <div class="ve-table-wrap">
+      <table class="ve-table">
+        <thead>
+          <tr>
+            <th style="width:34%">科目代码</th>
+            <th style="width:28%">科目名称</th>
+            <th class="num" style="width:15%">借方(DR)</th>
+            <th class="num" style="width:15%">贷方(CR)</th>
+            <th style="width:8%"></th>
+          </tr>
+        </thead>
+        <tbody id="ve-tbody-${containerId}">
+          ${voucher.entries.map((e,i)=>renderEntryRow(e,i,containerId)).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="ve-add-row">
+      <button class="ve-add-btn" onclick="addEntry('${containerId}')">
+        ＋ 添加分录行
+      </button>
+    </div>
+
+    <div class="ve-summary">
+      <div class="ve-totals">
+        <div class="ve-total-item">
+          <span class="ve-total-label">借方合计</span>
+          <span class="ve-total-debit" id="ve-td-${containerId}">¥${debit.toFixed(2)}</span>
+        </div>
+        <div class="ve-total-item">
+          <span class="ve-total-label">贷方合计</span>
+          <span class="ve-total-credit" id="ve-tc-${containerId}">¥${credit.toFixed(2)}</span>
+        </div>
+        <div class="ve-diff ${balanced?'ok':'err'}" id="ve-diff-${containerId}">
+          ${balanced ? '差额：¥0.00' : `差额：¥${Math.abs(diff).toFixed(2)}`}
+        </div>
+      </div>
+      <div class="ve-balance-hint ${balanced?'ok':''}" id="ve-hint-${containerId}">
+        ${balanced ? '✓ 可以提交' : '⚠ 借贷不平衡，无法提交'}
+      </div>
+    </div>
+
+    <div class="ve-actions">
+      <button class="ve-btn-confirm" id="ve-confirm-${containerId}"
+              onclick="confirmVoucher('${containerId}')"
+              ${balanced?'':'disabled'}>
+        ✓ 确认提交
+      </button>
+      <button class="ve-btn-cancel" onclick="cancelVoucher('${containerId}')">取消</button>
+      <button class="ve-btn-tell" onclick="tellAgentModify('${containerId}')">
+        💬 告诉 Agent 修改
+      </button>
+    </div>
+  </div>`;
+}
+
+function renderEntryRow(entry, idx, cid) {
+  const d = entry.debit  ? entry.debit.toFixed(2)  : '';
+  const c = entry.credit ? entry.credit.toFixed(2) : '';
+  return `
+  <tr id="ve-row-${cid}-${idx}">
+    <td>
+      <input class="ve-entry-input account-input" value="${esc(entry.account_code||'')}"
+             placeholder="科目代码"
+             oninput="onEntryChange('${cid}',${idx},'account_code',this.value)">
+    </td>
+    <td>
+      <input class="ve-entry-input account-input" value="${esc(entry.account_name||'')}"
+             placeholder="科目名称"
+             oninput="onEntryChange('${cid}',${idx},'account_name',this.value)">
+    </td>
+    <td class="debit-cell">
+      <input class="ve-entry-input" value="${d}" placeholder="0.00"
+             oninput="onEntryChange('${cid}',${idx},'debit',this.value)"
+             onfocus="if(!this.value)this.value=''"
+             style="color:${d?'var(--red)':''}">
+    </td>
+    <td class="credit-cell">
+      <input class="ve-entry-input" value="${c}" placeholder="0.00"
+             oninput="onEntryChange('${cid}',${idx},'credit',this.value)"
+             onfocus="if(!this.value)this.value=''"
+             style="color:${c?'var(--blue)':''}">
+    </td>
+    <td>
+      <button class="ve-del-btn" onclick="delEntry('${cid}',${idx})" title="删除此行">×</button>
+    </td>
+  </tr>`;
+}
+
+// ── 编辑处理 ─────────────────────────────────────────────────
+function onMetaChange(cid, field, value) {
+  saveHistory();
+  voucherState[field] = value;
+  // 标记变更样式
+  document.getElementById(`ve-${field==='summary'?'summary':field==='department'?'dept':'sub'}-${cid}`)
+    ?.classList.add('changed');
+  updateSummaryLine(cid);
+}
+
+function onEntryChange(cid, idx, field, value) {
+  saveHistory();
+  if (field === 'debit' || field === 'credit') {
+    const num = parseFloat(value) || 0;
+    voucherState.entries[idx][field] = num;
+    // 同一行另一侧清零（互斥）
+    if (num > 0) {
+      voucherState.entries[idx][field === 'debit' ? 'credit' : 'debit'] = 0;
+    }
+  } else {
+    voucherState.entries[idx][field] = value;
+  }
+  updateTotals(cid);
+}
+
+function addEntry(cid) {
+  saveHistory();
+  voucherState.entries.push({account_code:'', account_name:'', debit:0, credit:0});
+  renderVoucherEditor(voucherState, cid);
+}
+
+function delEntry(cid, idx) {
+  if (voucherState.entries.length <= 1) return;
+  saveHistory();
+  voucherState.entries.splice(idx, 1);
+  renderVoucherEditor(voucherState, cid);
+}
+
+function updateTotals(cid) {
+  const {debit, credit} = calcTotals(voucherState.entries);
+  const balanced = Math.abs(debit-credit) < 0.01;
+  const diff = Math.round((debit-credit)*100)/100;
+
+  const tdEl   = document.getElementById(`ve-td-${cid}`);
+  const tcEl   = document.getElementById(`ve-tc-${cid}`);
+  const diffEl = document.getElementById(`ve-diff-${cid}`);
+  const hintEl = document.getElementById(`ve-hint-${cid}`);
+  const confEl = document.getElementById(`ve-confirm-${cid}`);
+  const stEl   = document.querySelector(`#ve-${cid} .ve-status`);
+
+  if (tdEl)   tdEl.textContent   = `¥${debit.toFixed(2)}`;
+  if (tcEl)   tcEl.textContent   = `¥${credit.toFixed(2)}`;
+  if (diffEl) { diffEl.textContent = balanced?'差额：¥0.00':`差额：¥${Math.abs(diff).toFixed(2)}`; diffEl.className=`ve-diff ${balanced?'ok':'err'}`; }
+  if (hintEl) { hintEl.textContent = balanced?'✓ 可以提交':'⚠ 借贷不平衡，无法提交'; hintEl.className=`ve-balance-hint ${balanced?'ok':''}`; }
+  if (confEl) confEl.disabled = !balanced;
+  if (stEl)   { stEl.textContent = balanced?'✓ 借贷平衡':'✗ 未平衡'; stEl.className=`ve-status ${balanced?'balanced':'unbalanced'}`; }
+}
+
+function updateSummaryLine(cid) {
+  const v = voucherState;
+  if (v.summary && v.department && v.submitter) {
+    v.summary = `${v.department}${v.submitter}报销${v.usage||''}`.trim();
+    const el = document.getElementById(`ve-summary-${cid}`);
+    if (el) el.value = v.summary;
+  }
+}
+
+// ── 历史回滚 ────────────────────────────────────────────────
+function undoVoucher(cid) {
+  if (!voucherHistory.length) return;
+  voucherRedoStack.push(cloneVoucher(voucherState));
+  voucherState = voucherHistory.pop();
+  renderVoucherEditor(voucherState, cid);
+  tellAgentSilent(`[用户撤销了凭证修改，当前凭证已回滚到上一步：摘要="${voucherState.summary}"，分录数=${voucherState.entries.length}]`);
+}
+
+function redoVoucher(cid) {
+  if (!voucherRedoStack.length) return;
+  voucherHistory.push(cloneVoucher(voucherState));
+  voucherState = voucherRedoStack.pop();
+  renderVoucherEditor(voucherState, cid);
+}
+
+// ── 确认/取消 ────────────────────────────────────────────────
+async function confirmVoucher(cid) {
+  if (!isBalanced(voucherState.entries)) return;
+  const input = document.getElementById('msgInput');
+  input.value = `确认提交凭证，摘要：${voucherState.summary}，借方合计：¥${calcTotals(voucherState.entries).debit.toFixed(2)}`;
+  await sendMsg();
+}
+
+function cancelVoucher(cid) {
+  const v = voucherState;
+  appendMsg('user', '<p>取消本次报销</p>');
+  tellAgentSilent(`[用户取消了凭证，凭证号：${v.voucher_id}，摘要：${v.summary}]`);
+  voucherState = null;
+  voucherHistory = [];
+  voucherRedoStack = [];
+  // 隐藏编辑器
+  const edEl = document.getElementById(`ve-${cid}`);
+  if (edEl) { edEl.style.opacity='.4'; edEl.style.pointerEvents='none'; }
+}
+
+function tellAgentModify(cid) {
+  const v = voucherState;
+  const hint = `当前凭证：摘要="${v.summary}"，部门="${v.department}"，报销人="${v.submitter}"。请告诉我需要修改哪里：`;
+  appendMsg('assistant', `<p>${hint}</p>`);
+  document.getElementById('msgInput').focus();
+}
+
+// 静默告知 Agent（不显示在聊天里）
+async function tellAgentSilent(msg) {
+  try {
+    const fd = new FormData();
+    fd.append('session_id', SESSION_ID);
+    fd.append('message', msg);
+    await fetch(`${API}/agent/chat`, {method:'POST', body:fd});
+  } catch(e) {}
+}
+
+// ── SEND ─────────────────────────────────────────────────────
+async function sendMsg() {
+  if (isLoading) return;
+  const input = document.getElementById('msgInput');
+  const text  = input.value.trim();
+  const file  = stagedFile;
+  if (!text && !file) return;
+
+  isLoading = true;
+  document.getElementById('sendBtn').disabled = true;
+  input.value=''; autoResize(input);
+  stagedFile=null; renderPill();
+
+  if (text) appendMsg('user', `<p>${esc(text)}</p>`);
+  if (file) appendMsg('user', `<div class="file-bubble"><div class="file-icon">🖼️</div><div><div class="file-name">${file.name}</div><div class="file-size">${(file.size/1024).toFixed(1)} KB</div></div></div>`);
+
+  setStatus('处理中…');
+  const typing = appendTyping();
+
+  try {
+    // 若有当前凭证，把凭证状态也带上
+    let contextMsg = text;
+    if (voucherState && text && !text.startsWith('[')) {
+      contextMsg = `${text}\n\n[当前凭证状态：摘要="${voucherState.summary}"，部门="${voucherState.department}"，报销人="${voucherState.submitter}"，分录数=${voucherState.entries.length}，借方合计=¥${calcTotals(voucherState.entries).debit.toFixed(2)}]`;
+    }
+
+    const fd = new FormData();
+    fd.append('session_id', SESSION_ID);
+    fd.append('message', contextMsg);
+    if (file) fd.append('file', file);
+
+    const resp = await fetch(`${API}/agent/chat`, {method:'POST', body:fd});
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+
+    const bt = typing.querySelector('.bubble-text');
+    let replyHtml = md2html(data.reply || '');
+
+    // ── 解析凭证并渲染编辑器 ─────────────────────────────────
+    const cid = 'vc-' + Date.now();
+
+    if (data.voucher_data) {
+      // 直接用后端返回的结构化 JSON，无需解析
+      const v = data.voucher_data;
+      if (!v.voucher_id) v.voucher_id = genId();
+
+      voucherHistory = [];
+      voucherRedoStack = [];
+      voucherState = v;
+      voucherEditorId = cid;
+
+      // 去掉回复里的 JSON 标记块
+      replyHtml = replyHtml
+        .replace(/%%VOUCHER_JSON_START%%[\s\S]*?%%VOUCHER_JSON_END%%/g, '')
+        .replace(/```json[\s\S]*?```/g, '')
+        .replace(/\s*<p>\s*<\/p>/g, '')
+        .trim();
+      if (!replyHtml) replyHtml = '<p>已生成凭证草稿，请检查并编辑后确认提交：</p>';
+
+      bt.innerHTML = replyHtml + `<div id="${cid}"></div>`;
+      renderVoucherEditor(v, cid);
+
+    } else if (data.action === 'posted' && data.mcp_voucher) {
+      // MCP 凭证已生成
+      const mcp = data.mcp_voucher;
+      const mid = 'mcp-' + Date.now();
+      window[mid] = JSON.stringify(mcp, null, 2);
+      bt.innerHTML = replyHtml + `
+        <div class="mcp-card">
+          <div class="mcp-title">✅ MCP 凭证已生成</div>
+          <div class="mcp-row"><span class="mcp-key">凭证编号</span><span class="mcp-val">${mcp.voucher_id}</span></div>
+          <div class="mcp-row"><span class="mcp-key">摘要</span><span class="mcp-val">${mcp.summary}</span></div>
+          <div class="mcp-row"><span class="mcp-key">金额</span><span class="mcp-val">¥${mcp.total_amount}</span></div>
+          <div class="mcp-row"><span class="mcp-key">状态</span><span class="mcp-val">${mcp.status}</span></div>
+          <div class="mcp-row"><span class="mcp-key">时间</span><span class="mcp-val">${mcp.created_at?.slice(0,19)||''}</span></div>
+          <button class="mcp-json-btn" onclick="showJson('${mid}')">查看完整报文</button>
+        </div>`;
+      voucherState = null;
+
+    } else if (data.reply && (data.reply.includes('%%VOUCHER_JSON_START%%') || data.reply.includes('```json'))) {
+      // 回复里直接包含凭证 JSON（兜底情况）
+      const parsed = parseVoucherFromReply(data.reply);
+      if (parsed) {
+        voucherHistory = []; voucherRedoStack = []; voucherState = parsed;
+        replyHtml = replyHtml
+          .replace(/%%VOUCHER_JSON_START%%[\s\S]*?%%VOUCHER_JSON_END%%/g, '')
+          .replace(/```json[\s\S]*?```/g, '').trim();
+        bt.innerHTML = (replyHtml || '<p>已生成凭证草稿：</p>') + `<div id="${cid}"></div>`;
+        renderVoucherEditor(parsed, cid);
+      } else {
+        bt.innerHTML = replyHtml;
+      }
+    } else {
+      // 普通对话：检查是否需要更新现有凭证
+      if (voucherState && voucherEditorId && data.reply) {
+        const updated = tryExtractUpdates(data.reply);
+        if (updated) {
+          saveHistory();
+          Object.assign(voucherState, updated);
+          renderVoucherEditor(voucherState, voucherEditorId);
+        }
+      }
+      bt.innerHTML = replyHtml;
+    }
+
+    setStatus('Agent 就绪');
+  } catch(e) {
+    typing.querySelector('.bubble-text').innerHTML = `<p style="color:var(--red)">⚠️ 请求失败：${esc(e.message)}</p>`;
+    setStatus('连接异常');
+  }
+
+  scrollBottom();
+  isLoading = false;
+  document.getElementById('sendBtn').disabled = false;
+}
+
+// 从 Agent 回复中提取凭证字段更新
+function tryExtractUpdates(reply) {
+  const updates = {};
+  const amtMatch = reply.match(/金额[改更修]?[为成是到：:]\s*[¥￥]?\s*([\d.]+)/);
+  if (amtMatch) {
+    const amt = parseFloat(amtMatch[1]);
+    if (!isNaN(amt) && voucherState.entries.length > 0) {
+      updates.entries = cloneVoucher(voucherState).entries;
+      updates.entries[0].debit = amt;
+      // 更新贷方
+      const lastIdx = updates.entries.length - 1;
+      updates.entries[lastIdx].credit = amt;
+    }
+  }
+  return Object.keys(updates).length ? updates : null;
+}
+
+// ── 其他操作 ────────────────────────────────────────────────
+function clearChat() {
+  document.getElementById('messagesContainer').innerHTML='';
+  document.getElementById('welcomeBlock').style.display='';
+  SESSION_ID = 'sess-'+Date.now();
+  document.getElementById('sessDisplay').textContent = SESSION_ID.slice(-8);
+  voucherState=null; voucherHistory=[]; voucherRedoStack=[]; voucherEditorId=null;
+  stagedFile=null; renderPill();
+  fetch(`${API}/agent/session/${SESSION_ID}`,{method:'DELETE'}).catch(()=>{});
+}
+
+async function checkHealth() {
+  const t = appendTyping();
+  try {
+    const r = await fetch(`${API}/agent/health`);
+    const d = await r.json();
+    t.querySelector('.bubble-text').innerHTML = `<p>✅ 后端正常，Agent: <code>${d.agent}</code></p>`;
+  } catch {
+    t.querySelector('.bubble-text').innerHTML = `<p style="color:var(--red)">⚠️ 无法连接 ${API}</p>`;
+  }
+  scrollBottom();
+}
+
+function showJson(id) {
+  document.getElementById('jsonContent').innerHTML = syntaxHL(window[id]||'{}');
+  document.getElementById('jsonModal').classList.add('open');
+}
+function closeModal() { document.getElementById('jsonModal').classList.remove('open'); }
+
+function syntaxHL(json) {
+  return json.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,m=>{
+      let c='json-num';
+      if(/^"/.test(m))c=/:$/.test(m)?'json-key':'json-str';
+      else if(/true|false/.test(m))c='json-bool';
+      else if(/null/.test(m))c='json-null';
+      return`<span class="${c}">${m}</span>`;
+    });
+}
+</script>
+</body>
+</html>
