@@ -1,0 +1,70 @@
+﻿# 统一配置文件 - 财务报销 Agent 系统
+
+ocr:
+  preferred_mode: local                # OCR 模式：auto(优先云端失败回落本地) / local(仅本地) / remote(仅云端)
+  cloud_url: "http://10.36.6.252:8100/ocr" # 云端 OCR 服务地址
+  cloud_timeout: 30                   # 云端 OCR 超时（秒）
+  local_timeout: 60                   # 本地 OCR 超时（秒）
+  retry_count: 1                      # OCR 重试次数（仅在可重试异常场景生效）
+  local_lang: ch                      # 本地 OCR 识别语言（PaddleOCR lang）
+  local_use_angle_cls: true           # 本地 OCR 是否启用文字方向分类
+  local_use_gpu: false                # 本地 OCR 是否启用 GPU
+  local_model_dir: null               # 本地 OCR 模型目录（null 表示使用 Paddle 默认模型）
+
+session:
+  backend_class: "storage.backends.file_backend.FileSessionBackend" # 会话存储后端类（支持插件扩展）
+  storage_dir: "./sessions"          # 会话存储目录
+
+account_classifier:
+  strategy_chain: ["rag", "llm", "keyword"] # 科目匹配降级链，按顺序执行
+  confidence_threshold: 0.7           # RAG/LLM 结果低于阈值时触发降级
+
+rag:
+  enabled: false                      # 是否启用 RAG 能力（关闭时自动跳过 RAG）
+  knowledge_base_dir: "./rag/knowledge_base" # RAG 知识库目录
+  embedding_model: "BAAI/bge-small-zh-v1.5" # 向量化模型名称
+  embedding_api_url: ""               # 远程 embedding 服务地址（空字符串表示本地模型）
+  top_k: 3                            # RAG 检索返回候选数量
+
+batch:
+  max_concurrency: 3                  # 批量处理最大并发数
+  total_timeout: 300                  # 批量处理总超时（秒）
+  max_image_size_mb: 10               # 单张图片最大大小（MB）
+
+oa:
+  enabled: false                      # 是否启用 OA 连接器（兼容旧流程开关）
+  api_url: ""                         # OA 提交接口地址
+  auth_type: "bearer"                # OA 认证方式：bearer / basic / hmac
+  auth_credentials: {}                # OA 认证参数（按 auth_type 填 token 或 username/password 等）
+  field_mapping: {}                   # 凭证字段映射：{"源字段":"目标字段"}
+  use_webhook: true                   # OA 状态同步方式：true=Webhook，false=轮询
+  webhook_secret: ""                  # Webhook 签名密钥
+  polling_interval: 60                # 轮询间隔（秒）
+  submit_timeout: 30                  # OA 提交请求超时（秒）
+
+submission:
+  enabled: false                      # 是否启用统一外部提交通道（推荐后续使用此开关）
+  channel: "oa"                      # 提交通道：oa（当前已支持）/ accounting（预留）
+  retry_count: 1                      # 提交失败重试次数
+  retry_backoff_ms: 300               # 重试退避间隔（毫秒）
+
+voucher_repo:
+  storage_file: "./storage/vouchers.json" # 已确认凭证持久化文件路径
+
+voucher_type:
+  use_rag_fallback: true              # 凭证类型规则未命中时是否启用 RAG 回退
+  rag_knowledge_file: "voucher_type_rules.json" # 凭证类型 RAG 规则文件名（位于 rag.knowledge_base_dir）
+  rag_min_score: 0.4                  # 凭证类型 RAG 最低命中分数阈值
+  enable_llm_fallback: true           # 规则+RAG都未命中时是否允许使用 LLM 类型提示兜底
+
+extensions:
+  enable_budget_check: false          # 是否启用预算校验扩展
+  compliance:
+    max_single_amount: 50000          # 合规规则：单笔报销金额上限
+    max_monthly_by_type: 200000       # 合规规则：同类型费用月累计上限
+    ticket_validity_days: 180         # 合规规则：票据有效期天数
+
+agent:
+  mode: standalone                    # Agent 运行模式：standalone / embedded
+  model: "claude-sonnet-4-20250514"  # Agent 默认模型名称
+  max_turns: 20                       # 单次会话最大轮次

@@ -1,0 +1,22 @@
+fastapi==0.115.3
+uvicorn==0.30.0
+python-multipart==0.0.9
+python-dotenv==1.0.1
+requests==2.32.3
+httpx
+aiohttp
+claude-agent-sdk
+pydantic
+pyyaml
+setuptools
+pytest
+pytest-asyncio
+hypothesis
+numpy
+opencv-python-headless
+# PaddleOCR 本地推理（可选，仅 LOCAL/AUTO 模式需要）
+# Python 3.12 及以下推荐: pip install "paddleocr>=2.7,<3" "paddlepaddle>=2.6,<3"
+# Python 3.13 只能用 3.x: pip install paddleocr paddlepaddle
+# 注意: PaddlePaddle 3.x 在 Windows CPU 上存在 OneDNN 兼容性问题，建议使用 Python 3.12 + 2.x 版本
+# paddleocr
+# paddlepaddle

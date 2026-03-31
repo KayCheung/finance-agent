@@ -1,0 +1,314 @@
+# 实施计划：财务报销 Agent 系统架构升级
+
+## 概述
+
+按依赖关系从底层到上层逐步实施：共享数据模型 → 统一配置 → 存储层 → 工具层 → 业务扩展层 → Agent 核心层 → HTTP 网关 → 前端迁移。每个模块实现后紧跟属性测试和单元测试，确保增量验证。所有代码使用 Python，测试使用 pytest + hypothesis。
+
+## 任务
+
+- [x] 1. 搭建项目结构与共享数据模型
+  - [x] 1.1 创建项目目录结构和包初始化文件
+    - 创建 `agent_core/`、`tools/`、`storage/`、`storage/backends/`、`extensions/`、`rag/` 目录及各 `__init__.py`
+    - 创建 `requirements.txt`，包含 pydantic、fastapi、uvicorn、pytest、pytest-asyncio、hypothesis、pyyaml 等依赖
+    - _需求: 12.1_
+  - [x] 1.2 实现共享数据模型 `agent_core/models.py`
+    - 按设计文档定义所有 Pydantic 数据模型：TaxResult、OCRMode、OCRResult、TicketType、ParsedTicket、ClassifyStrategy、ClassifyResult、VoucherEntry、VoucherDraft、VoucherRecord、SessionSummary、SessionData、InvoiceStatus、BatchItemResult、BatchResult、ApprovalStatus、SubmitResult、UserIdentity、AgentRequest、AgentAction、AgentResponse、ComplianceViolation、ComplianceResult、ApprovalRecommendation、BudgetResult、ApprovalAdvice、ApprovalRecord（含 voucher_id、department、account_code、amount、approval_status、created_at 字段，供 VoucherRepository.get_similar_approvals 返回使用）
+    - _需求: 1.1, 1.2, 2.1, 3.1, 5.7, 6.7, 7.2, 8.1, 9.1, 11.2, 11.5, 11.9, 12.2, 12.3_
+  - [x] 1.3 创建统一配置文件 `config.yaml` 和配置加载模块
+    - 按设计文档创建 `config.yaml`，包含 ocr、session、account_classifier、rag、batch、oa、extensions、agent 各节
+    - 实现配置加载函数，支持从 YAML 文件读取并映射到 Pydantic 配置模型
+    - _需求: 3.3, 4.1, 4.5, 5.1, 6.9, 6.10, 7.3, 11.1, 12.5_
+
+- [x] 2. 实现存储层（SessionBackend + Session_Store）
+  - [x] 2.1 实现存储后端抽象接口 `storage/backends/base.py`
+    - 定义 `SessionBackend` ABC，包含 save、load、delete、list、get_latest 抽象方法
+    - _需求: 3.1, 3.10_
+  - [x] 2.2 实现 JSON 文件存储后端 `storage/backends/file_backend.py`
+    - 实现 `FileSessionBackend`，每个会话一个 .json 文件，支持 save/load/delete/list/get_latest
+    - _需求: 3.2, 3.4, 3.5, 3.6, 3.9_
+  - [x] 2.3 实现 YAML 文件存储后端 `storage/backends/yaml_backend.py`
+    - 实现 `YamlSessionBackend`，每个会话一个 .yaml 文件
+    - _需求: 3.2_
+  - [x] 2.4 实现 Session_Store 门面 `storage/session_store.py`
+    - 实现 `SessionStore`，包含 get_or_create、update、remove 方法
+    - get_or_create：有 session_id 则 load，无则 get_latest，均无则创建新会话
+    - load 失败时记录错误日志，创建新会话并通知上层
+    - 支持通过配置项动态加载后端类
+    - _需求: 3.3, 3.6, 3.7, 3.8_
+  - [x] 2.5 编写属性测试：会话存储往返一致性（Property 4）
+    - **Property 4: 会话存储往返一致性**
+    - 使用 hypothesis 自定义 SessionData 生成策略，对 FileSessionBackend 和 YamlSessionBackend 分别执行 save→load 验证数据等价
+    - **验证: 需求 3.4, 3.5, 3.6, 8.4**
+  - [x] 2.6 编写属性测试：get_latest 返回最近活跃会话（Property 5）
+    - **Property 5: get_latest 返回最近活跃会话**
+    - 生成多个不同 last_active 的会话，验证 get_latest 返回的会话 last_active ≥ 所有其他会话
+    - **验证: 需求 3.7, 8.3**
+  - [x] 2.7 编写属性测试：会话删除后不可加载（Property 6）
+    - **Property 6: 会话删除后不可加载**
+    - 保存会话后执行 delete，再 load 同一 session_id 应返回 None
+    - **验证: 需求 3.9**
+  - [x] 2.8 编写单元测试：Session_Store 边界情况
+    - 测试会话数据损坏时的恢复行为、空存储时 get_latest 返回 None、后端不可用时的错误处理
+    - _需求: 3.8_
+
+- [x] 3. 检查点 - 存储层验证
+  - 确保所有测试通过，如有问题请向用户确认。
+
+- [ ] 4. 实现 Tax_Calculator（价税分离）
+  - [x] 4.1 实现 `tools/tax_calculator.py`
+    - 使用 Python Decimal 类型实现 calculate_tax 函数
+    - amount_without_tax = total / (1 + rate)，ROUND_HALF_UP 四舍五入到两位小数
+    - tax_amount = total - amount_without_tax（减法保证恒等式）
+    - 税率为 0 或 None 时，不含税价款 = 含税总额，税额 = 0
+    - 负数或非数值输入抛出 ValueError，包含参数名和期望类型
+    - _需求: 1.1, 1.2, 1.3, 1.4, 1.5_
+  - [x] 4.2 编写属性测试：价税分离恒等式不变量（Property 1）
+    - **Property 1: 价税分离恒等式不变量**
+    - 使用 `st.decimals(min_value=0.01, max_value=1e8)` 生成金额，`st.sampled_from([0, 0.01, 0.03, 0.06, 0.09, 0.13])` 生成税率
+    - 验证 amount_without_tax + tax_amount == total_amount 恒成立
+    - **验证: 需求 1.1, 1.2, 1.3**
+  - [x] 4.3 编写属性测试：无效输入错误处理（Property 2）
+    - **Property 2: 无效输入错误处理**
+    - 使用 `st.one_of(st.integers(max_value=-1), st.text(), st.none())` 生成无效输入
+    - 验证抛出包含参数名称和期望类型的错误信息
+    - **验证: 需求 1.5**
+  - [x] 4.4 编写单元测试：Tax_Calculator 典型场景
+    - 测试税率为 0、None、3%、6%、9%、13% 的具体计算示例
+    - _需求: 1.1, 1.4_
+
+- [ ] 5. 实现 OCR_Service（双模式 + 降级）
+  - [x] 5.1 实现 `tools/ocr_service.py`
+    - 实现 OCRConfig、OCRService 类
+    - 内网地址校验函数 _validate_intranet_url：校验私有 IP 段（10.x、172.16-31.x、192.168.x）和内网域名
+    - recognize 方法：尝试 preferred_mode → 云端超时/错误自动降级到本地 → 两者均失败抛出 OCRUnavailableError
+    - 降级事件记录到日志（时间戳、错误原因、降级持续时长），记录降级开始时间，恢复云端时计算并补录持续时长
+    - 下次调用自动尝试恢复云端
+    - _需求: 2.1, 2.2, 2.3, 2.4, 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9_
+  - [x] 5.2 编写属性测试：内网地址校验（Property 3）
+    - **Property 3: 内网地址校验**
+    - 使用 st.from_regex 生成内网/外网 URL，验证校验函数对内网地址返回 True，外网地址返回 False
+    - **验证: 需求 2.1, 2.4**
+  - [x] 5.3 编写属性测试：OCR 降级与恢复（Property 7）
+    - **Property 7: OCR 降级与恢复**
+    - Mock 云端服务，随机注入超时/错误，验证自动降级到本地且 mode_used 为 local，降级后下次调用先尝试云端
+    - **验证: 需求 4.4, 4.6**
+  - [x] 5.4 编写属性测试：OCR 结果元数据完整性（Property 8）
+    - **Property 8: OCR 结果元数据完整性**
+    - 验证成功结果中 mode_used 为 cloud_vl 或 local，elapsed_ms 为非负整数
+    - **验证: 需求 4.7**
+  - [x] 5.5 编写单元测试：OCR_Service 边界情况
+    - 测试内网地址格式示例、外网地址拒绝、双模式均不可用的错误消息
+    - _需求: 2.1, 4.8_
+
+- [ ] 6. 实现 Ticket_Parser（多票据类型解析）
+  - [x] 6.1 实现 `tools/ticket_parser.py`
+    - 实现 TicketParser 类，包含 parse 和 format 方法
+    - 根据 OCR 文本特征判断票据类型（增值税专票、普票、电子发票、火车票、机票行程单、出租车票、过路费发票）
+    - 每种票据类型独立的字段提取规则和校验规则
+    - 无法识别时标记为 UNKNOWN，返回原始文本
+    - _需求: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8_
+  - [x] 6.2 编写属性测试：票据解析往返一致性（Property 21）
+    - **Property 21: 票据解析往返一致性**
+    - 自定义各类型 ParsedTicket 生成策略，验证 parse(format(ticket)) 与原始 ticket 等价
+    - **验证: 需求 9.9**
+  - [x] 6.3 编写单元测试：各票据类型解析示例
+    - 测试增值税专票字段提取、火车票字段提取、机票行程单字段提取、出租车票字段提取、未知类型处理
+    - _需求: 9.3, 9.4, 9.5, 9.6, 9.7_
+
+- [x] 7. 检查点 - 工具层基础验证
+  - 确保所有测试通过，如有问题请向用户确认。
+
+- [ ] 8. 实现 Account_Classifier（科目匹配三策略降级链）
+  - [x] 8.1 实现 RAG 引擎骨架 `rag/engine.py`
+    - 实现 RAGEngine 类，定义 search 接口（返回候选科目列表 + 相似度分数）
+    - 支持通过配置启用/禁用，禁用时 Account_Classifier 自动跳过 RAG 策略
+    - _需求: 5.2_
+  - [x] 8.2 实现 `tools/account_classifier.py`
+    - 实现 AccountClassifier 类，支持 strategy_chain 配置
+    - _classify_rag：检索前 3 候选，最高相似度 < threshold 则降级
+    - _classify_llm：通过 MCP 获取科目列表 + LLM 推理，失败则降级
+    - _classify_keyword：硬编码规则兜底，始终可用
+    - 返回结果包含 strategy_used、confidence、fallback_path
+    - _需求: 5.1, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8_
+  - [x] 8.3 编写属性测试：科目匹配降级链（Property 9）
+    - **Property 9: 科目匹配降级链**
+    - Mock RAG/LLM 返回，随机置信度，验证按链顺序降级且最终回退到 keyword 返回有效结果
+    - **验证: 需求 5.5, 5.6, 5.8**
+  - [x] 8.4 编写属性测试：科目匹配结果元数据完整性（Property 10）
+    - **Property 10: 科目匹配结果元数据完整性**
+    - 验证结果包含 strategy_used、confidence、fallback_path，且 strategy_used 在降级链中
+    - **验证: 需求 5.7**
+
+- [ ] 9. 实现 VoucherRepository（凭证数据仓库）
+  - [x] 9.1 实现 `storage/voucher_repository.py`
+    - 实现 VoucherQuery 和 VoucherRepository 类
+    - save、get_by_id、query（多维度过滤）、search（关键词搜索摘要字段）
+    - get_monthly_total：按部门+费用类型查询月度累计金额
+    - get_similar_approvals：按部门、科目、金额区间（±30%）查询历史审批记录
+    - _需求: 8.1, 8.2, 8.6, 8.7_
+  - [x] 9.2 编写属性测试：凭证存储往返一致性（Property 18）
+    - **Property 18: 凭证存储往返一致性**
+    - 自定义 VoucherRecord 生成策略，验证 save→get_by_id 数据等价
+    - **验证: 需求 8.1**
+  - [x] 9.3 编写属性测试：凭证查询过滤正确性（Property 19）
+    - **Property 19: 凭证查询过滤正确性**
+    - 生成随机凭证集 + 随机查询条件，验证返回结果均满足所有过滤器
+    - **验证: 需求 8.2, 8.6**
+  - [x] 9.4 编写属性测试：月度累计金额聚合正确性（Property 20）
+    - **Property 20: 月度累计金额聚合正确性**
+    - 生成随机凭证集，验证 get_monthly_total 返回值等于手动求和
+    - **验证: 需求 8.7**
+
+- [ ] 10. 实现 Voucher_Generator（凭证生成器）
+  - [x] 10.1 实现 `tools/voucher_generator.py`
+    - 实现 VoucherGenerator 类，封装凭证草稿生成和 MCP 标准报文生成逻辑
+    - 从当前 finance_agent.py 中的 generate_mcp_voucher 工具逻辑抽离为独立模块
+    - 支持单张发票凭证生成和批量合并凭证生成（同科目发票金额汇总，多条借方分录，借贷总额平衡）
+    - 生成凭证 ID（VOU-YYYYMMDD-XXXXXX 格式）
+    - _需求: 6.4_
+
+- [ ] 11. 实现 Batch_Processor（批量报销处理）
+  - [x] 11.1 实现 `tools/batch_processor.py`
+    - 实现 BatchConfig、BatchProcessor 类
+    - 校验图片大小（> 10MB → REJECTED）
+    - asyncio.Semaphore 控制并发度
+    - asyncio.wait_for 控制总超时
+    - 失败跳过，继续处理其余
+    - 按票据类型和科目分组，支持 merge/separate 策略
+    - _需求: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.8, 6.9, 6.10, 6.11_
+  - [x] 11.2 编写属性测试：批量处理摘要一致性（Property 11）
+    - **Property 11: 批量处理摘要一致性**
+    - 生成随机数量图片（含随机失败），验证 success_count + failed_count == total，SUCCESS 项有 ParsedTicket，非 SUCCESS 项有错误原因
+    - **验证: 需求 6.6, 6.7**
+  - [x] 11.3 编写属性测试：合并凭证借贷平衡（Property 12）
+    - **Property 12: 合并凭证借贷平衡**
+    - 生成随机发票金额列表，验证合并凭证 total_debit == total_credit == 金额之和
+    - **验证: 需求 6.4**
+  - [x] 11.4 编写属性测试：批量处理并发度限制（Property 13）
+    - **Property 13: 批量处理并发度限制**
+    - 生成大批量请求，监控并发数不超过 max_concurrency
+    - **验证: 需求 6.9**
+  - [x] 11.5 编写属性测试：批量处理图片大小限制（Property 14）
+    - **Property 14: 批量处理图片大小限制**
+    - 生成随机大小的 base64 数据，验证超过 10MB 的图片被 REJECTED
+    - **验证: 需求 6.11**
+  - [x] 11.6 编写单元测试：Batch_Processor 边界情况
+    - 测试 20 张发票容量、总超时行为、空批次处理
+    - _需求: 6.8, 6.10_
+
+- [x] 12. 检查点 - 工具层与数据层验证
+  - 确保所有测试通过，如有问题请向用户确认。
+
+- [ ] 13. 实现业务扩展层（OA_Connector + Budget/Compliance/Approval）
+  - [x] 13.1 实现 `extensions/oa_connector.py`
+    - 实现 OAConfig、OAConnector 类
+    - submit_voucher：提交凭证到 OA，成功回写审批单号
+    - handle_webhook：校验签名，更新凭证状态
+    - poll_status：轮询模式查询审批状态
+    - Webhook 不可用时降级为轮询
+    - _需求: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7_
+  - [x] 13.2 编写属性测试：Webhook 签名校验（Property 15）
+    - **Property 15: Webhook 签名校验**
+    - 生成随机 payload + 正确/错误签名，验证签名不匹配时拒绝请求
+    - **验证: 需求 7.6**
+  - [x] 13.3 编写属性测试：OA 提交失败状态标记（Property 16）
+    - **Property 16: OA 提交失败状态标记**
+    - Mock OA 接口失败，验证凭证状态标记为"提交失败"且错误详情被记录
+    - **验证: 需求 7.4**
+  - [x] 13.4 编写属性测试：Webhook 状态同步（Property 17）
+    - **Property 17: Webhook 状态同步**
+    - 生成随机审批状态变更，验证本地凭证状态更新为回调中的状态值
+    - **验证: 需求 7.5**
+  - [x] 13.5 实现 `extensions/budget_checker.py`
+    - 实现 BudgetChecker 类，enabled 默认 False
+    - check 方法：查询部门预算余额，与凭证金额比较，超支时生成警告
+    - 未启用时返回 passed=True
+    - _需求: 11.1, 11.2, 11.3, 11.4_
+  - [x] 13.6 编写属性测试：预算超支警告（Property 23）
+    - **Property 23: 预算超支警告**
+    - 生成随机预算余额和凭证金额，验证超支时包含预算余额和超支金额的警告
+    - **验证: 需求 11.2, 11.3**
+  - [x] 13.7 实现 `extensions/compliance_checker.py`
+    - 实现 ComplianceRules、ComplianceChecker 类
+    - 检查规则：单笔报销金额上限、同类型月度累计上限（通过 VoucherRepository 查询）、票据日期有效期
+    - 违规时返回 passed=False + 具体违规项和制度条款
+    - _需求: 11.5, 11.6, 11.7, 11.8_
+  - [x] 13.8 编写属性测试：合规检查规则覆盖（Property 22）
+    - **Property 22: 合规检查规则覆盖**
+    - 生成随机凭证 + 随机规则配置，验证超限时 passed=False 且包含违规项
+    - **验证: 需求 11.5, 11.6, 11.8**
+  - [x] 13.9 实现 `extensions/approval_advisor.py`
+    - 实现 ApprovalAdvisor 类，AMOUNT_RANGE_RATIO = 0.3
+    - advise 方法：计算金额区间（±30%），通过 VoucherRepository 查询历史相似凭证，统计通过率，生成建议
+    - _需求: 11.9, 11.10, 11.11_
+  - [x] 13.10 编写属性测试：审批建议完整性（Property 24）
+    - **Property 24: 审批建议完整性**
+    - 生成随机历史数据和凭证，验证建议包含 recommendation、reason、similar_cases_count、approval_rate
+    - **验证: 需求 11.9, 11.11**
+
+- [x] 14. 检查点 - 业务扩展层验证
+  - 确保所有测试通过，如有问题请向用户确认。
+
+- [ ] 15. 实现 Agent_Core（核心能力层解耦）
+  - [x] 15.1 实现 `agent_core/core.py`
+    - 实现 AgentMode、CapabilityDeclaration、AgentCore 类
+    - invoke 方法：统一入口，接收 AgentRequest 返回 AgentResponse
+    - get_capability：返回能力声明（agent_name、description、supported_intents、input/output_schema）
+    - register_mcp_tools：嵌入模式下注册 MCP 工具
+    - 事件回调：on_voucher_created、on_voucher_confirmed、on_voucher_submitted
+    - 嵌入模式接受外部 session_context 和 user_identity
+    - _需求: 12.1, 12.2, 12.3, 12.4, 12.5, 12.6, 12.7, 12.8_
+  - [x] 15.2 实现 `agent_core/finance_agent.py`
+    - 集成 Claude Agent SDK，注册所有工具（tax_calculator、ocr_service、account_classifier、voucher_generator、ticket_parser、batch_processor）
+    - 协调工具调用流程：OCR → Ticket_Parser → Tax_Calculator → Account_Classifier → 凭证生成
+    - 调用 Compliance_Checker 和 Approval_Advisor
+    - _需求: 1.6, 12.1, 12.6_
+  - [x] 15.3 编写属性测试：嵌入模式外部上下文传递（Property 25）
+    - **Property 25: 嵌入模式外部上下文传递**
+    - 生成随机 UserIdentity 和 session_context，验证嵌入模式下使用外部传入的上下文和身份信息
+    - **验证: 需求 12.4, 12.8**
+  - [x] 15.4 编写单元测试：Agent_Core 能力声明与模式切换
+    - 测试能力声明包含所有必需字段、嵌入模式 MCP 工具注册、独立模式与嵌入模式切换
+    - _需求: 12.3, 12.5, 12.6_
+
+- [ ] 16. 重构 FastAPI 网关 `main.py`
+  - [x] 16.1 重构 `main.py` 为精简路由层
+    - 移除 main.py 中的业务逻辑，仅保留路由定义
+    - 路由委托给 AgentCore.invoke()
+    - 添加 OA Webhook 回调端点 POST /oa/callback
+    - 添加会话管理端点（列表、加载、删除）
+    - 添加凭证查询端点
+    - _需求: 7.6, 8.2, 8.3, 12.1_
+  - [x] 16.2 集成 Session_Store 到网关
+    - 请求进入时通过 Session_Store 获取或创建会话
+    - 响应返回前同步会话状态
+    - _需求: 3.6, 3.7, 8.5_
+
+- [x] 17. 检查点 - 后端集成验证
+  - 确保所有测试通过，如有问题请向用户确认。
+
+- [ ] 18. Vue3 前端迁移
+  - [x] 18.1 初始化 Vue3 项目结构
+    - 在 `frontend/` 目录创建 Vue3 + Vite 项目
+    - 配置 package.json、vite.config.ts、Vue Router、Pinia
+    - _需求: 10.1, 10.3, 10.4_
+  - [x] 18.2 实现核心 Vue 组件
+    - 拆分聊天区域（ChatView）、凭证编辑器（VoucherEditor）、侧边栏（Sidebar）、文件上传（FileUpload）为独立组件
+    - 实现路由：报销对话页、历史查询页、系统设置页
+    - 使用 Pinia 管理会话状态、凭证数据、用户信息
+    - 历史查询页实现会话列表展示和历史会话加载
+    - 应用启动时自动调用后端 get_latest 接口，恢复最后一次活跃会话的对话记录和凭证状态到聊天区域
+    - 保持与 FastAPI 后端 API 完全兼容
+    - _需求: 10.1, 10.2, 10.3, 10.4, 10.5, 8.3, 8.4, 8.5_
+
+- [x] 19. 最终检查点 - 全系统验证
+  - 确保所有测试通过，如有问题请向用户确认。
+
+## 备注
+
+- 标记 `*` 的任务为可选任务，可跳过以加速 MVP 交付
+- 每个任务引用了具体的需求编号，确保可追溯性
+- 检查点任务用于增量验证，确保每个阶段的代码质量
+- 属性测试验证设计文档中定义的正确性属性（Property 1-25），使用 hypothesis 库
+- 单元测试验证具体示例和边界情况
+- RAG_Engine（rag/engine.py）为可选扩展，仅实现接口骨架，具体向量检索逻辑可后续迭代
